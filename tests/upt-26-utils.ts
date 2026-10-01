@@ -27,9 +27,11 @@ export function createApprovalEvent(
 export function createTransferEvent(
   from: Address,
   to: Address,
-  value: BigInt
+  value: BigInt,
+  logIndex: i32
 ): Transfer {
   let transferEvent = changetype<Transfer>(newMockEvent())
+  transferEvent.logIndex = BigInt.fromI32(logIndex)
 
   transferEvent.parameters = new Array()
 

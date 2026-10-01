@@ -1,6 +1,6 @@
 # dapp_graph_demo
 
-The Graph subgraph，索引 Sepolia 上 [UPT26](https://sepolia.etherscan.io/address/0xc9423ee04f2afa3a4f73fa5a21427543a7a5edbe) 合约的 `Approval` 和 `Transfer` 事件。
+The Graph subgraph，索引 Sepolia 上 [UPT26](https://sepolia.etherscan.io/address/0xc9423ee04f2afa3a4f73fa5a21427543a7a5edbe) 合约的 `Approval` 和 `Transfer` 事件，并根据转账维护每个地址的余额和转入/转出记录。
 
 | 项 | 值 |
 | --- | --- |
@@ -77,7 +77,7 @@ Studio 页面：<https://thegraph.com/studio/subgraph/dapp_graph_demo>
 curl -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <API_KEY>" \
-  -d '{"query":"{ approvals(first: 5) { id owner spender value } transfers(first: 5) { id from to value } }"}' \
+  -d '{"query":"{ users(first: 5, orderBy: balance, orderDirection: desc) { id balance } transfers(first: 5) { id from { id } to { id } value } }"}' \
   https://api.studio.thegraph.com/query/1762815/dapp_graph_demo/version/latest
 ```
 
@@ -125,10 +125,28 @@ Postgres 和 IPFS 数据写在 `./data/`。改合约地址或起始区块后，�
     blockNumber
     transactionHash
   }
+  users(first: 5, orderBy: balance, orderDirection: desc) {
+    id
+    balance
+    sentTransfers(first: 5, orderBy: blockNumber, orderDirection: desc) {
+      id
+      to { id }
+      value
+      blockNumber
+      transactionHash
+    }
+    receivedTransfers(first: 5, orderBy: blockNumber, orderDirection: desc) {
+      id
+      from { id }
+      value
+      blockNumber
+      transactionHash
+    }
+  }
   transfers(first: 5, orderBy: blockNumber, orderDirection: desc) {
     id
-    from
-    to
+    from { id }
+    to { id }
     value
     blockNumber
     transactionHash

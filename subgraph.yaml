@@ -18,6 +18,7 @@ dataSources:
       entities:
         - Approval
         - Transfer
+        - User
       abis:
         - name: UPT26
           file: ./abis/UPT26.json

@@ -4,11 +4,24 @@
 //   save() 交给正在索引这份 subgraph 的 Graph Node，写入它自己的 Postgres，不是合约、也不是前端的库。
 //   本地是 docker-compose 里的 postgres 服务；部署到 Subgraph Studio 后是 The Graph 索引节点上的库。
 //   查询走该 subgraph 的 GraphQL 接口，不直接连 Postgres。
+import { Address, BigInt } from "@graphprotocol/graph-ts"
 import {
   Approval as ApprovalEvent,
   Transfer as TransferEvent
 } from "../generated/UPT26/UPT26"
-import { Approval, Transfer } from "../generated/schema"
+import { Approval, Transfer, User } from "../generated/schema"
+
+// 地址第一次出现在 Transfer 里时建档，余额从 0 开始，之后只靠事件加减。
+function getOrCreateUser(address: Address): User {
+  let existing = User.load(address)
+  if (existing != null) {
+    return existing
+  }
+
+  let created = new User(address)
+  created.balance = BigInt.zero()
+  return created
+}
 
 // subgraph.yaml 把 Approval(address,address,uint256) 绑到这个函数。
 // 索引器从 startBlock 往后扫 Sepolia，「每遇到一条该事件日志就调用一次」。
@@ -36,13 +49,37 @@ export function handleApproval(event: ApprovalEvent): void {
 }
 
 // 同理，每条 Transfer 日志调用一次。transfer 和 transferFrom 都会发这个事件。
+// 同时更新双方余额：铸币只加接收方，销毁只减发送方，普通转账一边减一边加。
 export function handleTransfer(event: TransferEvent): void {
+  let fromAddress = event.params.from // 转出地址；铸币时是 0 地址
+  let toAddress = event.params.to // 转入地址；销毁时是 0 地址
+  let value = event.params.value
+
+  // 自己转给自己时必须共用同一个对象。两边各 load 一次时，第二次还读不到未 save 的余额。
+  let fromUser = getOrCreateUser(fromAddress)
+  let toUser = fromAddress.equals(toAddress)
+    ? fromUser
+    : getOrCreateUser(toAddress)
+
+  let zero = Address.zero()
+  if (!fromAddress.equals(zero)) {
+    fromUser.balance = fromUser.balance.minus(value)
+  }
+  if (!toAddress.equals(zero)) {
+    toUser.balance = toUser.balance.plus(value)
+  }
+
+  fromUser.save()
+  if (!fromAddress.equals(toAddress)) {
+    toUser.save()
+  }
+
   let entity = new Transfer(
     event.transaction.hash.concatI32(event.logIndex.toI32())
   )
-  entity.from = event.params.from // 转出地址；铸币时通常是 0 地址
-  entity.to = event.params.to // 转入地址；销毁时通常是 0 地址
-  entity.value = event.params.value // 转移数量
+  entity.from = fromAddress
+  entity.to = toAddress
+  entity.value = value
 
   entity.blockNumber = event.block.number
   entity.blockTimestamp = event.block.timestamp
