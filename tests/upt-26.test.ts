@@ -77,11 +77,10 @@ describe("User balances and transfers", () => {
     )
 
     assert.entityCount("Transfer", 1)
-    assert.fieldEquals(
+    assert.entityCount("User", 1)
+    assert.notInStore(
       "User",
-      "0x0000000000000000000000000000000000000000",
-      "balance",
-      "0"
+      "0x0000000000000000000000000000000000000000"
     )
     assert.fieldEquals(
       "User",
@@ -106,7 +105,7 @@ describe("User balances and transfers", () => {
     handleTransfer(createTransferEvent(alice, bob, BigInt.fromI32(100), 3))
 
     assert.entityCount("Transfer", 3)
-    assert.entityCount("User", 3)
+    assert.entityCount("User", 2)
     assert.fieldEquals(
       "User",
       "0x0000000000000000000000000000000000000001",
@@ -151,17 +150,16 @@ describe("User balances and transfers", () => {
       createTransferEvent(alice, Address.zero(), BigInt.fromI32(250), 2)
     )
 
+    assert.entityCount("User", 1)
+    assert.notInStore(
+      "User",
+      "0x0000000000000000000000000000000000000000"
+    )
     assert.fieldEquals(
       "User",
       "0x0000000000000000000000000000000000000001",
       "balance",
       "750"
-    )
-    assert.fieldEquals(
-      "User",
-      "0x0000000000000000000000000000000000000000",
-      "balance",
-      "0"
     )
   })
 
@@ -175,7 +173,7 @@ describe("User balances and transfers", () => {
     )
     handleTransfer(createTransferEvent(alice, alice, BigInt.fromI32(1000), 2))
 
-    assert.entityCount("User", 2)
+    assert.entityCount("User", 1)
     assert.fieldEquals(
       "User",
       "0x0000000000000000000000000000000000000001",

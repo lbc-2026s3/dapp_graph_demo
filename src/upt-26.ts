@@ -55,30 +55,42 @@ export function handleTransfer(event: TransferEvent): void {
   let toAddress = event.params.to // 转入地址；销毁时是 0 地址
   let value = event.params.value
 
-  // 自己转给自己时必须共用同一个对象。两边各 load 一次时，第二次还读不到未 save 的余额。
-  let fromUser = getOrCreateUser(fromAddress)
-  let toUser = fromAddress.equals(toAddress)
-    ? fromUser
-    : getOrCreateUser(toAddress)
-
+  // 0 地址不是用户。铸币没有发送方，销毁没有接收方。
   let zero = Address.zero()
-  if (!fromAddress.equals(zero)) {
+  let fromIsZero = fromAddress.equals(zero)
+  let toIsZero = toAddress.equals(zero)
+  let sameUser = fromAddress.equals(toAddress)
+
+  // 自己转给自己时必须共用同一个对象。两边各 load 一次时，第二次还读不到未 save 的余额。
+  let fromUser: User | null = fromIsZero ? null : getOrCreateUser(fromAddress)
+  let toUser: User | null = toIsZero
+    ? null
+    : sameUser
+      ? fromUser
+      : getOrCreateUser(toAddress)
+
+  if (fromUser != null) {
     fromUser.balance = fromUser.balance.minus(value)
   }
-  if (!toAddress.equals(zero)) {
+  if (toUser != null) {
     toUser.balance = toUser.balance.plus(value)
   }
-
-  fromUser.save()
-  if (!fromAddress.equals(toAddress)) {
+  if (fromUser != null) {
+    fromUser.save()
+  }
+  if (toUser != null && !sameUser) {
     toUser.save()
   }
 
   let entity = new Transfer(
     event.transaction.hash.concatI32(event.logIndex.toI32())
   )
-  entity.from = fromAddress
-  entity.to = toAddress
+  if (fromUser != null) {
+    entity.from = fromAddress
+  }
+  if (toUser != null) {
+    entity.to = toAddress
+  }
   entity.value = value
 
   entity.blockNumber = event.block.number
