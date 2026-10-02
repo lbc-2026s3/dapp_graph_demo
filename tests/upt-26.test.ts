@@ -6,7 +6,7 @@ import {
   beforeAll,
   afterAll
 } from "matchstick-as/assembly/index"
-import { Address, BigInt } from "@graphprotocol/graph-ts"
+import { Address, BigInt, Bytes } from "@graphprotocol/graph-ts"
 import { Approval } from "../generated/schema"
 import { Approval as ApprovalEvent } from "../generated/UPT26/UPT26"
 import { handleApproval, handleTransfer } from "../src/upt-26"
@@ -179,6 +179,92 @@ describe("User balances and transfers", () => {
       "0x0000000000000000000000000000000000000001",
       "balance",
       "1000"
+    )
+  })
+
+  test("snapshots keep the balance after each block", () => {
+    clearStore()
+    let alice = Address.fromString(
+      "0x0000000000000000000000000000000000000001"
+    )
+    let bob = Address.fromString(
+      "0x0000000000000000000000000000000000000002"
+    )
+    let txHash = Bytes.fromHexString(
+      "0xa16081f360e3847006db660bae1c6d1b2e17ec2a"
+    )
+
+    let mint = createTransferEvent(
+      Address.zero(),
+      alice,
+      BigInt.fromI32(1000),
+      1
+    )
+    mint.block.number = BigInt.fromI32(10)
+    handleTransfer(mint)
+
+    let firstSend = createTransferEvent(alice, bob, BigInt.fromI32(100), 2)
+    firstSend.block.number = BigInt.fromI32(20)
+    handleTransfer(firstSend)
+
+    let secondSend = createTransferEvent(alice, bob, BigInt.fromI32(50), 3)
+    secondSend.block.number = BigInt.fromI32(20)
+    handleTransfer(secondSend)
+
+    assert.entityCount("BalanceSnapshot", 5)
+    assert.fieldEquals(
+      "BalanceSnapshot",
+      txHash.concatI32(1).concat(alice).toHexString(),
+      "balance",
+      "1000"
+    )
+    assert.fieldEquals(
+      "BalanceSnapshot",
+      txHash.concatI32(1).concat(alice).toHexString(),
+      "blockNumber",
+      "10"
+    )
+    assert.fieldEquals(
+      "BalanceSnapshot",
+      txHash.concatI32(2).concat(alice).toHexString(),
+      "balance",
+      "900"
+    )
+    assert.fieldEquals(
+      "BalanceSnapshot",
+      txHash.concatI32(3).concat(alice).toHexString(),
+      "balance",
+      "850"
+    )
+    assert.fieldEquals(
+      "BalanceSnapshot",
+      txHash.concatI32(3).concat(alice).toHexString(),
+      "blockNumber",
+      "20"
+    )
+    assert.fieldEquals(
+      "BalanceSnapshot",
+      txHash.concatI32(3).concat(bob).toHexString(),
+      "balance",
+      "150"
+    )
+    assert.fieldEquals(
+      "BalanceSnapshot",
+      txHash.concatI32(2).concat(alice).toHexString(),
+      "sortKey",
+      BigInt.fromI32(20)
+        .times(BigInt.fromString("4294967296"))
+        .plus(BigInt.fromI32(2))
+        .toString()
+    )
+    assert.fieldEquals(
+      "BalanceSnapshot",
+      txHash.concatI32(3).concat(alice).toHexString(),
+      "sortKey",
+      BigInt.fromI32(20)
+        .times(BigInt.fromString("4294967296"))
+        .plus(BigInt.fromI32(3))
+        .toString()
     )
   })
 })

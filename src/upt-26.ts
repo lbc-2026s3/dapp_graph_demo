@@ -9,7 +9,10 @@ import {
   Approval as ApprovalEvent,
   Transfer as TransferEvent
 } from "../generated/UPT26/UPT26"
-import { Approval, Transfer, User } from "../generated/schema"
+import { Approval, BalanceSnapshot, Transfer, User } from "../generated/schema"
+
+// 2^32。同一区块里 logIndex 排在 blockNumber 后面，保证 sortKey 随区块和日志递增。
+const SORT_KEY_BLOCK_STRIDE = "4294967296" // 2^32 = 4294967296
 
 // 地址第一次出现在 Transfer 里时建档，余额从 0 开始，之后只靠事件加减。
 function getOrCreateUser(address: Address): User {
@@ -21,6 +24,27 @@ function getOrCreateUser(address: Address): User {
   let created = new User(address)
   created.balance = BigInt.zero()
   return created
+}
+
+// 记下这次转账之后的余额。User.balance 只保留最新值，历史余额靠这些快照查询。
+function saveBalanceSnapshot(user: User, event: TransferEvent): void {
+  let snapshot = new BalanceSnapshot(
+    event.transaction.hash.concatI32(event.logIndex.toI32()).concat(user.id)
+  )
+  snapshot.user = user.id
+  snapshot.balance = user.balance
+  snapshot.blockNumber = event.block.number
+  snapshot.logIndex = event.logIndex
+  // GraphQL 一次只能按一个字段排序，所以把「区块号 + 日志序号」合成一个数。
+  // sortKey = 区块号 * 2^32 + logIndex。区块号在高位，同一区块内 logIndex 在低位。
+  // 例如区块 20 的第 2、3 条日志分别是 20 * 2^32 + 2 和 20 * 2^32 + 3，第 3 条更大；
+  // 区块 21 的任何日志都比区块 20 大。查某高度时取 sortKey 最大的一条，就是该区块最后一笔之后的余额。
+  snapshot.sortKey = event.block.number
+    .times(BigInt.fromString(SORT_KEY_BLOCK_STRIDE))
+    .plus(event.logIndex)
+  snapshot.blockTimestamp = event.block.timestamp
+  snapshot.transactionHash = event.transaction.hash
+  snapshot.save()
 }
 
 // subgraph.yaml 把 Approval(address,address,uint256) 绑到这个函数。
@@ -77,9 +101,11 @@ export function handleTransfer(event: TransferEvent): void {
   }
   if (fromUser != null) {
     fromUser.save()
+    saveBalanceSnapshot(fromUser, event)
   }
   if (toUser != null && !sameUser) {
     toUser.save()
+    saveBalanceSnapshot(toUser, event)
   }
 
   let entity = new Transfer(

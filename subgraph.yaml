@@ -19,6 +19,7 @@ dataSources:
         - Approval
         - Transfer
         - User
+        - BalanceSnapshot
       abis:
         - name: UPT26
           file: ./abis/UPT26.json

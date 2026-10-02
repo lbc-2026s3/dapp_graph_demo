@@ -15,6 +15,19 @@ type User @entity(immutable: false) {
   balance: BigInt!
   sentTransfers: [Transfer!]! @derivedFrom(field: "from")
   receivedTransfers: [Transfer!]! @derivedFrom(field: "to")
+  balanceSnapshots: [BalanceSnapshot!]! @derivedFrom(field: "user")
+}
+
+# 某次转账之后的余额。查某区块高度时，取 blockNumber 不超过该高度、sortKey 最大的一条；没有记录则当时余额为 0。
+type BalanceSnapshot @entity(immutable: true) {
+  id: Bytes!
+  user: User!
+  balance: BigInt!
+  blockNumber: BigInt!
+  logIndex: BigInt!
+  sortKey: BigInt! # blockNumber * 2^32 + logIndex，同一区块内按日志顺序取最后一笔
+  blockTimestamp: BigInt!
+  transactionHash: Bytes!
 }
 
 type Transfer @entity(immutable: true) {
